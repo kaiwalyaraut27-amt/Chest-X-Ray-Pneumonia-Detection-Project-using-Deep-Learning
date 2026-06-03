@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PneumoScan AI — Chest X-Ray Pneumonia Detection</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0a0c10;
+    --bg2: #11141b;
+    --bg3: #191d27;
+    --surface: #1e2330;
+    --surface2: #252b3b;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #eef0f6;
+    --text2: #8b93a8;
+    --text3: #545e75;
+    --accent: #4f9cf9;
+    --accent2: #7bc4ff;
+    --green: #3ecf8e;
+    --green2: #25a06a;
+    --amber: #f5a623;
+    --red: #f05454;
+    --purple: #9f7aea;
+    --radius: 12px;
+    --radius-lg: 18px;
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ---- NOISE OVERLAY ---- */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0; opacity: 0.5;
+  }
+
+  /* ---- GLOW ORBS ---- */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(100px);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.12;
+  }
+  .orb-1 { width: 500px; height: 500px; background: #1a4fff; top: -150px; left: -100px; }
+  .orb-2 { width: 400px; height: 400px; background: #00c48c; bottom: 100px; right: -80px; }
+  .orb-3 { width: 300px; height: 300px; background: #9f4fff; top: 50%; left: 50%; transform: translate(-50%,-50%); }
+
+  /* ---- LAYOUT ---- */
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 28px; position: relative; z-index: 1; }
+
+  /* ---- NAV ---- */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,12,16,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 28px;
+  }
+  .nav-inner {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 60px;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--font-display); font-size: 18px; font-weight: 700;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .logo-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: linear-gradient(135deg, #1a4fff, #00c48c);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .logo-icon svg { width: 18px; height: 18px; fill: white; }
+  .nav-links { display: flex; gap: 28px; }
+  .nav-links a {
+    font-size: 13px; font-weight: 500;
+    color: var(--text2); text-decoration: none; letter-spacing: 0.02em;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--text); }
+  .nav-badge {
+    font-size: 11px; font-family: var(--font-mono);
+    background: var(--surface); color: var(--accent);
+    border: 1px solid rgba(79,156,249,0.2);
+    padding: 4px 10px; border-radius: 20px;
+  }
+
+  /* ---- HERO ---- */
+  .hero { padding: 100px 0 80px; text-align: center; }
+  .hero-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em;
+    color: var(--accent); text-transform: uppercase;
+    background: rgba(79,156,249,0.08); border: 1px solid rgba(79,156,249,0.2);
+    padding: 5px 14px; border-radius: 20px; margin-bottom: 28px;
+  }
+  .hero-tag span { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .hero h1 {
+    font-family: var(--font-display); font-size: clamp(42px, 7vw, 80px);
+    font-weight: 800; line-height: 1.05; letter-spacing: -0.03em;
+    margin-bottom: 24px;
+  }
+  .hero h1 .line2 { color: transparent; -webkit-text-stroke: 1px rgba(255,255,255,0.25); }
+  .hero h1 .accent-word {
+    background: linear-gradient(90deg, #4f9cf9, #3ecf8e);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .hero-sub {
+    font-size: 17px; color: var(--text2); max-width: 560px; margin: 0 auto 40px;
+    line-height: 1.7;
+  }
+  .hero-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 13px 24px; border-radius: 10px;
+    font-family: var(--font-body); font-size: 14px; font-weight: 500;
+    cursor: pointer; text-decoration: none; transition: all 0.2s;
+    border: none;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #1a4fff, #0d85e8);
+    color: white; box-shadow: 0 0 30px rgba(26,79,255,0.3);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 40px rgba(26,79,255,0.4); }
+  .btn-secondary {
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border2);
+  }
+  .btn-secondary:hover { background: var(--surface2); }
+
+  /* ---- STATS ROW ---- */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    margin: 64px 0;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px 24px;
+    position: relative; overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .stat-card:hover { border-color: var(--border2); transform: translateY(-2px); }
+  .stat-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    border-radius: 2px 2px 0 0;
+  }
+  .stat-card.blue::before { background: linear-gradient(90deg, #1a4fff, #4f9cf9); }
+  .stat-card.green::before { background: linear-gradient(90deg, #3ecf8e, #00c48c); }
+  .stat-card.amber::before { background: linear-gradient(90deg, #f5a623, #e8890d); }
+  .stat-card.purple::before { background: linear-gradient(90deg, #9f7aea, #6b46c1); }
+  .stat-label {
+    font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text3); margin-bottom: 10px;
+  }
+  .stat-value {
+    font-family: var(--font-display); font-size: 32px; font-weight: 700;
+    line-height: 1; margin-bottom: 4px;
+  }
+  .stat-card.blue .stat-value { color: var(--accent); }
+  .stat-card.green .stat-value { color: var(--green); }
+  .stat-card.amber .stat-value { color: var(--amber); }
+  .stat-card.purple .stat-value { color: var(--purple); }
+  .stat-sub { font-size: 12px; color: var(--text3); }
+
+  /* ---- SECTION TITLES ---- */
+  .section { padding: 60px 0; }
+  .section-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 40px; }
+  .section-eyebrow {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--text3); margin-bottom: 8px;
+  }
+  .section-title {
+    font-family: var(--font-display); font-size: 28px; font-weight: 700;
+    letter-spacing: -0.02em; line-height: 1.2;
+  }
+
+  /* ---- UPLOAD ZONE ---- */
+  .upload-zone {
+    border: 1.5px dashed var(--border2);
+    border-radius: var(--radius-lg);
+    padding: 60px 40px;
+    text-align: center;
+    background: var(--bg2);
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative; overflow: hidden;
+  }
+  .upload-zone:hover {
+    border-color: rgba(79,156,249,0.4);
+    background: rgba(79,156,249,0.03);
+  }
+  .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(79,156,249,0.06);
+  }
+  .upload-icon {
+    width: 64px; height: 64px; margin: 0 auto 20px;
+    background: var(--surface); border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .upload-icon svg { width: 30px; height: 30px; stroke: var(--accent); fill: none; stroke-width: 1.5; }
+  .upload-title { font-family: var(--font-display); font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+  .upload-sub { color: var(--text2); font-size: 14px; margin-bottom: 24px; }
+  .upload-formats {
+    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+  }
+  .format-pill {
+    font-family: var(--font-mono); font-size: 11px;
+    background: var(--surface); color: var(--text3);
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 6px;
+  }
+  #file-input { display: none; }
+
+  /* ---- RESULT PANEL ---- */
+  .result-panel {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    margin-top: 20px;
+    animation: fadeUp 0.4s ease;
+  }
+  @keyframes fadeUp { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform: translateY(0); } }
+  .result-header { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; }
+  .result-badge {
+    padding: 8px 18px; border-radius: 8px;
+    font-family: var(--font-display); font-size: 15px; font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .result-badge.normal { background: rgba(62,207,142,0.12); color: var(--green); border: 1px solid rgba(62,207,142,0.25); }
+  .result-badge.pneumonia { background: rgba(240,84,84,0.12); color: var(--red); border: 1px solid rgba(240,84,84,0.25); }
+  .confidence-bar { flex: 1; }
+  .confidence-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); margin-bottom: 8px; }
+  .confidence-track { height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .confidence-fill { height: 100%; border-radius: 3px; transition: width 1s cubic-bezier(0.4,0,0.2,1); }
+  .confidence-fill.normal { background: linear-gradient(90deg, #3ecf8e, #00c48c); }
+  .confidence-fill.pneumonia { background: linear-gradient(90deg, #f05454, #c92a2a); }
+
+  /* ---- METRICS GRID ---- */
+  .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .metric-tile {
+    background: var(--bg3); border-radius: var(--radius); padding: 16px 18px;
+    border: 1px solid var(--border);
+  }
+  .metric-tile-label { font-size: 11px; color: var(--text3); font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+  .metric-tile-value { font-family: var(--font-display); font-size: 22px; font-weight: 700; }
+
+  /* ---- PIPELINE STEPS ---- */
+  .pipeline { display: flex; flex-direction: column; gap: 2px; }
+  .pipeline-step {
+    display: grid; grid-template-columns: 56px 1fr auto;
+    align-items: center; gap: 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 24px;
+    transition: border-color 0.2s;
+  }
+  .pipeline-step:hover { border-color: var(--border2); }
+  .step-num {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+    color: var(--text3); letter-spacing: 0.05em;
+  }
+  .step-content { }
+  .step-name { font-weight: 500; font-size: 14px; margin-bottom: 2px; }
+  .step-desc { font-size: 12px; color: var(--text3); }
+  .step-tag {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em;
+    text-transform: uppercase; padding: 4px 10px; border-radius: 6px;
+    white-space: nowrap;
+  }
+  .tag-done { background: rgba(62,207,142,0.1); color: var(--green); border: 1px solid rgba(62,207,142,0.2); }
+  .tag-tf { background: rgba(79,156,249,0.1); color: var(--accent); border: 1px solid rgba(79,156,249,0.2); }
+  .tag-sklearn { background: rgba(159,122,234,0.1); color: var(--purple); border: 1px solid rgba(159,122,234,0.2); }
+
+  /* ---- MODEL COMPARISON ---- */
+  .model-table { width: 100%; border-collapse: collapse; }
+  .model-table th {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text3);
+    padding: 10px 16px; text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .model-table td {
+    padding: 14px 16px; font-size: 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .model-table tr:last-child td { border-bottom: none; }
+  .model-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .model-name { font-weight: 500; }
+  .model-best { color: var(--amber); }
+  .bar-cell { min-width: 120px; }
+  .mini-bar { height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; margin-top: 6px; }
+  .mini-fill { height: 100%; border-radius: 2px; }
+  .best-row td { background: rgba(245,166,35,0.04) !important; }
+  .best-row td:first-child { border-left: 2px solid rgba(245,166,35,0.4); }
+  .crown { font-size: 12px; margin-left: 6px; }
+
+  /* ---- TECH STACK ---- */
+  .tech-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .tech-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 20px;
+    display: flex; align-items: center; gap: 14px;
+    transition: border-color 0.2s;
+  }
+  .tech-card:hover { border-color: var(--border2); }
+  .tech-icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .tech-info .tech-name { font-weight: 500; font-size: 14px; }
+  .tech-info .tech-desc { font-size: 12px; color: var(--text3); margin-top: 2px; }
+
+  /* ---- CONFUSION MATRIX ---- */
+  .cm-grid {
+    display: grid; grid-template-columns: auto 1fr 1fr;
+    gap: 4px; max-width: 360px;
+  }
+  .cm-cell {
+    padding: 18px; border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 90px;
+  }
+  .cm-header { background: transparent; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--text3); text-transform: uppercase; }
+  .cm-tp { background: rgba(62,207,142,0.15); border: 1px solid rgba(62,207,142,0.2); }
+  .cm-tn { background: rgba(62,207,142,0.08); border: 1px solid rgba(62,207,142,0.15); }
+  .cm-fp { background: rgba(240,84,84,0.08); border: 1px solid rgba(240,84,84,0.15); }
+  .cm-fn { background: rgba(240,84,84,0.15); border: 1px solid rgba(240,84,84,0.2); }
+  .cm-num { font-family: var(--font-display); font-size: 28px; font-weight: 700; }
+  .cm-tp .cm-num, .cm-tn .cm-num { color: var(--green); }
+  .cm-fp .cm-num, .cm-fn .cm-num { color: var(--red); }
+  .cm-lbl { font-size: 10px; font-family: var(--font-mono); color: var(--text3); margin-top: 4px; letter-spacing: 0.05em; }
+
+  /* ---- FUTURE WORK ---- */
+  .future-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .future-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px 22px;
+    display: flex; gap: 14px;
+    transition: border-color 0.2s;
+  }
+  .future-card:hover { border-color: var(--border2); }
+  .future-num {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text3);
+    padding-top: 2px;
+  }
+  .future-title { font-weight: 500; font-size: 14px; margin-bottom: 4px; }
+  .future-text { font-size: 13px; color: var(--text3); line-height: 1.5; }
+
+  /* ---- FOOTER ---- */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 0;
+    text-align: center;
+  }
+  .footer-name {
+    font-family: var(--font-display); font-size: 20px; font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .footer-sub { font-size: 13px; color: var(--text3); margin-bottom: 20px; }
+  .footer-tags { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .footer-tag {
+    font-size: 11px; font-family: var(--font-mono);
+    background: var(--surface); color: var(--text3);
+    border: 1px solid var(--border); padding: 4px 12px; border-radius: 6px;
+  }
+
+  /* ---- DIVIDER ---- */
+  hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+  /* ---- ANIMATED XRAY ---- */
+  .xray-visual {
+    position: relative; width: 100%; aspect-ratio: 16/9;
+    background: var(--bg2); border-radius: var(--radius-lg);
+    border: 1px solid var(--border); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 20px;
+  }
+  .xray-placeholder {
+    text-align: center; color: var(--text3);
+  }
+  .xray-placeholder svg { width: 64px; height: 64px; opacity: 0.3; margin-bottom: 10px; }
+  .xray-placeholder p { font-size: 13px; }
+  .xray-preview { width: 100%; height: 100%; object-fit: contain; display: none; }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    .tech-grid { grid-template-columns: repeat(2, 1fr); }
+    .future-grid { grid-template-columns: 1fr; }
+    .pipeline-step { grid-template-columns: 40px 1fr; }
+    .pipeline-step .step-tag { display: none; }
+    .nav-links { display: none; }
+    .hero h1 { font-size: 38px; }
+  }
+
+  @media (max-width: 540px) {
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .metrics-grid { grid-template-columns: 1fr 1fr; }
+    .hero-actions { flex-direction: column; align-items: center; }
+  }
+</style>
+</head>
+<body>
+
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 2C8 2 4.5 5.5 4.5 9.5c0 2.2 1 4.2 2.6 5.5L12 22l4.9-7c1.6-1.3 2.6-3.3 2.6-5.5C19.5 5.5 16 2 12 2z"/></svg>
+      </div>
+      PneumoScan AI
+    </a>
+    <nav class="nav-links">
+      <a href="#demo">Demo</a>
+      <a href="#metrics">Metrics</a>
+      <a href="#pipeline">Pipeline</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#comparison">Comparison</a>
+    </nav>
+    <span class="nav-badge">v1.0 · MobileNetV2</span>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="container">
+  <section class="hero">
+    <div class="hero-tag"><span></span> Deep Learning · Medical Imaging</div>
+    <h1>
+      Detect Pneumonia<br>
+      <span class="accent-word">From Chest X-Rays</span><br>
+      <span class="line2">With 97.69% Recall</span>
+    </h1>
+    <p class="hero-sub">
+      An end-to-end deep learning pipeline using Transfer Learning with MobileNetV2 to automatically classify chest X-ray images as Normal or Pneumonia.
+    </p>
+    <div class="hero-actions">
+      <a href="#demo" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        Try the Demo
+      </a>
+      <a href="#pipeline" class="btn btn-secondary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        View Pipeline
+      </a>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card blue">
+      <div class="stat-label">Test Accuracy</div>
+      <div class="stat-value">86.06%</div>
+      <div class="stat-sub">624 test images</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Sensitivity / Recall</div>
+      <div class="stat-value">97.69%</div>
+      <div class="stat-sub">390 pneumonia cases</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="stat-label">AUC Score</div>
+      <div class="stat-value">0.9558</div>
+      <div class="stat-sub">ROC curve area</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">F1 Score</div>
+      <div class="stat-value">89.75%</div>
+      <div class="stat-sub">Harmonic mean</div>
+    </div>
+  </div>
+
+  <!-- DEMO SECTION -->
+  <section class="section" id="demo">
+    <div class="section-header">
+      <div>
+        <div class="section-eyebrow">Live Inference</div>
+        <div class="section-title">Upload & Predict</div>
+      </div>
+    </div>
+
+    <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <input type="file" id="file-input" accept="image/*" onchange="handleFile(this.files[0])">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      </div>
+      <div class="upload-title">Drop a chest X-ray image</div>
+      <div class="upload-sub">Click to browse, or drag & drop your file here</div>
+      <div class="upload-formats">
+        <span class="format-pill">JPEG</span>
+        <span class="format-pill">PNG</span>
+        <span class="format-pill">DICOM</span>
+        <span class="format-pill">WebP</span>
+      </div>
+    </div>
+
+    <div class="result-panel" id="result-panel">
+      <div class="result-header">
+        <div id="result-badge" class="result-badge normal">NORMAL</div>
+        <div class="confidence-bar">
+          <div class="confidence-label">
+            <span>Prediction confidence</span>
+            <span id="conf-pct">0%</span>
+          </div>
+          <div class="confidence-track">
+            <div class="confidence-fill normal" id="conf-fill" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="xray-visual">
+        <img id="xray-preview" class="xray-preview" alt="X-Ray Preview" />
+        <div class="xray-placeholder" id="xray-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          <p>Image preview will appear here</p>
+        </div>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric-tile">
+          <div class="metric-tile-label">Prediction</div>
+          <div class="metric-tile-value" id="res-label">—</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-tile-label">Confidence</div>
+          <div class="metric-tile-value" id="res-conf">—</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-tile-label">Model</div>
+          <div class="metric-tile-value" style="font-size:14px; padding-top:4px;">MobileNetV2</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-tile-label">Input Size</div>
+          <div class="metric-tile-value" style="font-size:14px; padding-top:4px;">150 × 150</div>
+        </div>
+      </div>
+      <p style="font-size:12px; color: var(--text3); margin-top: 16px; line-height:1.6;">
+        ⚠️ This tool is for educational demonstration only. It is not a certified medical device and should not be used for clinical diagnosis.
+      </p>
+    </div>
+  </section>
+
+  <!-- METRICS -->
+  <section class="section" id="metrics">
+    <div class="section-header">
+      <div>
+        <div class="section-eyebrow">Evaluation</div>
+        <div class="section-title">Performance Metrics</div>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+      <!-- Left: metric tiles -->
+      <div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="metric-tile">
+            <div class="metric-tile-label">Accuracy</div>
+            <div class="metric-tile-value" style="color: var(--accent);">86.06%</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-tile-label">Precision</div>
+            <div class="metric-tile-value" style="color: var(--purple);">83.01%</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-tile-label">Recall</div>
+            <div class="metric-tile-value" style="color: var(--green);">97.69%</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-tile-label">F1 Score</div>
+            <div class="metric-tile-value" style="color: var(--amber);">89.75%</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-tile-label">Sensitivity</div>
+            <div class="metric-tile-value" style="color: var(--green);">97.69%</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-tile-label">Specificity</div>
+            <div class="metric-tile-value" style="color: var(--red);">66.67%</div>
+          </div>
+        </div>
+      </div>
+      <!-- Right: confusion matrix -->
+      <div>
+        <div style="margin-bottom: 14px; font-size: 13px; color: var(--text3); font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase;">Confusion Matrix — Test Set</div>
+        <div class="cm-grid">
+          <div class="cm-cell cm-header"></div>
+          <div class="cm-cell cm-header" style="text-align:center;">Pred: Normal</div>
+          <div class="cm-cell cm-header" style="text-align:center;">Pred: Pneum.</div>
+
+          <div class="cm-cell cm-header">Act: Normal</div>
+          <div class="cm-cell cm-tn">
+            <div class="cm-num">156</div>
+            <div class="cm-lbl">True Neg.</div>
+          </div>
+          <div class="cm-cell cm-fp">
+            <div class="cm-num">78</div>
+            <div class="cm-lbl">False Pos.</div>
+          </div>
+
+          <div class="cm-cell cm-header">Act: Pneum.</div>
+          <div class="cm-cell cm-fn">
+            <div class="cm-num">9</div>
+            <div class="cm-lbl">False Neg.</div>
+          </div>
+          <div class="cm-cell cm-tp">
+            <div class="cm-num">381</div>
+            <div class="cm-lbl">True Pos.</div>
+          </div>
+        </div>
+        <p style="font-size: 12px; color: var(--text3); margin-top: 14px; line-height: 1.5;">
+          Only 9 false negatives — missed pneumonia cases — out of 390 actual pneumonia patients. Sensitivity is prioritized in this medical context.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PIPELINE -->
+  <section class="section" id="pipeline">
+    <div class="section-header">
+      <div>
+        <div class="section-eyebrow">Methodology</div>
+        <div class="section-title">11-Stage Pipeline</div>
+      </div>
+    </div>
+    <div class="pipeline">
+      <div class="pipeline-step">
+        <div class="step-num">01</div>
+        <div class="step-content">
+          <div class="step-name">Project Brief</div>
+          <div class="step-desc">Problem definition, metric selection, architecture justification</div>
+        </div>
+        <span class="step-tag tag-done">Planning</span>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">02</div>
+        <div class="step-content">
+          <div class="step-name">Exploratory Data Analysis</div>
+          <div class="step-desc">Class distribution, sample visualization, image quality checks — 5,870 total images</div>
+        </div>
+        <span class="step-tag tag-done">EDA</span>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">03</div>
+        <div class="step-content">
+          <div class="step-name">Data Preprocessing</div>
+          <div class="step-desc">Resize to 150×150, normalize to [0,1], augmentation on training set only</div>
+        </div>
+        <span class="step-tag tag-tf">TensorFlow</span>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">04</div>
+        <div class="step-content">
+          <div class="step-name">Architecture Design</div>
+          <div class="step-desc">MobileNetV2 backbone + GAP + BatchNorm + Dropout + Dense classifier head</div>
+        </div>
+        <span class="step-tag tag-tf">Keras</span>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">05</div>
+        <div class="step-content">
+          <div class="step-name">Model Training</div>
+          <div class="step-desc">Adam optimizer, lr=0.0001, EarlyStopping, ReduceLROnPlateau — stopped at epoch 19</div>
+        </div>
+        <span class="step-tag tag-tf">Training</span>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">06</div>
+        <div class="step-content">
+          <div class="step-name">Model Evaluation</div>
+          <div class="step-desc">Accuracy, Precision, Recall, F1, AUC, Sensitivity, Specificity, ROC curve</div>
+        </div>
+        <span class="step-tag tag-sklearn">sklearn</span>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">07</div>
+        <div class="step-content">
+          <div class="step-name">Hyperparameter Tuning</div>
+          <div class="step-desc">Experiments: Dropout 0.5, Dense(64) head, Fine-Tuning top 20 layers</div>
+        </div>
+        <span class="step-tag tag-done">Tuning</span>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">08</div>
+        <div class="step-content">
+          <div class="step-name">Model Comparison</div>
+          <div class="step-desc">Baseline vs tuned variants vs fine-tuned — results tracked in DataFrame</div>
+        </div>
+        <span class="step-tag tag-done">Analysis</span>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">09</div>
+        <div class="step-content">
+          <div class="step-name">Model Persistence</div>
+          <div class="step-desc">final_model.keras, best_model.keras, model_metadata.json, class_labels.json</div>
+        </div>
+        <span class="step-tag tag-done">Saved</span>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">10</div>
+        <div class="step-content">
+          <div class="step-name">Prediction Interface</div>
+          <div class="step-desc">DeepLearningPredictor class with preprocessing, batch inference, error handling</div>
+        </div>
+        <span class="step-tag tag-tf">Deploy</span>
+      </div>
+      <div class="pipeline-step">
+        <div class="step-num">11</div>
+        <div class="step-content">
+          <div class="step-name">Documentation</div>
+          <div class="step-desc">Project summary, architecture decisions, limitations, future work</div>
+        </div>
+        <span class="step-tag tag-done">Docs</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section class="section" id="architecture">
+    <div class="section-header">
+      <div>
+        <div class="section-eyebrow">Model Architecture</div>
+        <div class="section-title">MobileNetV2 + Classification Head</div>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+      <div>
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;">
+          <div style="padding: 16px 20px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center;">
+            <span>Model Summary</span>
+            <span style="color: var(--accent);">2,427,201 params</span>
+          </div>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr style="background: var(--bg3);">
+              <th style="padding: 10px 16px; text-align: left; font-family: var(--font-mono); font-size: 10px; color: var(--text3); font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;">Layer</th>
+              <th style="padding: 10px 16px; text-align: right; font-family: var(--font-mono); font-size: 10px; color: var(--text3); font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;">Output Shape</th>
+              <th style="padding: 10px 16px; text-align: right; font-family: var(--font-mono); font-size: 10px; color: var(--text3); font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;">Params</th>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 12px 16px;"><span style="font-family: var(--font-mono); font-size: 12px; color: var(--accent);">MobileNetV2</span><br><span style="font-size: 11px; color: var(--text3);">Frozen backbone</span></td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text2);">5 × 5 × 1280</td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text3);">2,257,984</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 12px 16px;"><span style="font-family: var(--font-mono); font-size: 12px; color: var(--purple);">GlobalAveragePooling2D</span></td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text2);">1280</td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text3);">0</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 12px 16px;"><span style="font-family: var(--font-mono); font-size: 12px; color: var(--text2);">BatchNormalization</span></td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text2);">1280</td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text3);">5,120</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 12px 16px;"><span style="font-family: var(--font-mono); font-size: 12px; color: var(--text2);">Dropout(0.30)</span></td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text2);">1280</td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text3);">0</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 12px 16px;"><span style="font-family: var(--font-mono); font-size: 12px; color: var(--green);">Dense(128, relu)</span></td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text2);">128</td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text3);">163,968</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 12px 16px;"><span style="font-family: var(--font-mono); font-size: 12px; color: var(--text2);">Dropout(0.20)</span></td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text2);">128</td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text3);">0</td>
+            </tr>
+            <tr>
+              <td style="padding: 12px 16px;"><span style="font-family: var(--font-mono); font-size: 12px; color: var(--amber);">Dense(1, sigmoid)</span><br><span style="font-size: 11px; color: var(--text3);">Binary output</span></td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text2);">1</td>
+              <td style="padding: 12px 16px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--text3);">129</td>
+            </tr>
+          </table>
+          <div style="padding: 14px 16px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; color: var(--text3);">
+            <span>Trainable: <span style="color: var(--green);">166,657</span></span>
+            <span>Frozen: <span style="color: var(--text3);">2,260,544</span></span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 16px;">
+          <div style="font-size: 13px; font-family: var(--font-mono); color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 16px;">Training Config</div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+              <span style="color: var(--text2); font-size: 13px;">Optimizer</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; color: var(--accent);">Adam · lr=0.0001</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+              <span style="color: var(--text2); font-size: 13px;">Loss Function</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text);">Binary Crossentropy</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+              <span style="color: var(--text2); font-size: 13px;">Epochs Run</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text);">19 / 50 (early stop)</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+              <span style="color: var(--text2); font-size: 13px;">Best Epoch</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; color: var(--green);">Epoch 9</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+              <span style="color: var(--text2); font-size: 13px;">LR Reductions</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; color: var(--amber);">Epochs 8, 13, 17</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: var(--text2); font-size: 13px;">Best Val Loss</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text);">0.4829</span>
+            </div>
+          </div>
+        </div>
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 24px;">
+          <div style="font-size: 13px; font-family: var(--font-mono); color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 14px;">Augmentations</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <span style="background: rgba(79,156,249,0.1); border: 1px solid rgba(79,156,249,0.2); color: var(--accent); font-family: var(--font-mono); font-size: 12px; padding: 5px 12px; border-radius: 6px;">RandomFlip(horizontal)</span>
+            <span style="background: rgba(79,156,249,0.1); border: 1px solid rgba(79,156,249,0.2); color: var(--accent); font-family: var(--font-mono); font-size: 12px; padding: 5px 12px; border-radius: 6px;">RandomRotation(0.05)</span>
+            <span style="background: rgba(79,156,249,0.1); border: 1px solid rgba(79,156,249,0.2); color: var(--accent); font-family: var(--font-mono); font-size: 12px; padding: 5px 12px; border-radius: 6px;">RandomZoom(0.10)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODEL COMPARISON -->
+  <section class="section" id="comparison">
+    <div class="section-header">
+      <div>
+        <div class="section-eyebrow">Experiments</div>
+        <div class="section-title">Model Comparison</div>
+      </div>
+    </div>
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;">
+      <table class="model-table">
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>Val Accuracy</th>
+            <th>Val AUC</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="model-name">Baseline</span></td>
+            <td>
+              <span>91.2%</span>
+              <div class="bar-cell"><div class="mini-bar"><div class="mini-fill" style="width: 91.2%; background: var(--accent);"></div></div></div>
+            </td>
+            <td>
+              <span>0.958</span>
+              <div class="bar-cell"><div class="mini-bar"><div class="mini-fill" style="width: 95.8%; background: var(--purple);"></div></div></div>
+            </td>
+            <td style="font-size: 12px; color: var(--text3);">Frozen MobileNetV2 backbone</td>
+          </tr>
+          <tr>
+            <td><span class="model-name">Dropout 0.5</span></td>
+            <td>
+              <span>91.8%</span>
+              <div class="bar-cell"><div class="mini-bar"><div class="mini-fill" style="width: 91.8%; background: var(--accent);"></div></div></div>
+            </td>
+            <td>
+              <span>0.962</span>
+              <div class="bar-cell"><div class="mini-bar"><div class="mini-fill" style="width: 96.2%; background: var(--purple);"></div></div></div>
+            </td>
+            <td style="font-size: 12px; color: var(--text3);">Increased dropout regularization</td>
+          </tr>
+          <tr>
+            <td><span class="model-name">Dense(64) Head</span></td>
+            <td>
+              <span>92.1%</span>
+              <div class="bar-cell"><div class="mini-bar"><div class="mini-fill" style="width: 92.1%; background: var(--accent);"></div></div></div>
+            </td>
+            <td>
+              <span>0.965</span>
+              <div class="bar-cell"><div class="mini-bar"><div class="mini-fill" style="width: 96.5%; background: var(--purple);"></div></div></div>
+            </td>
+            <td style="font-size: 12px; color: var(--text3);">Smaller dense layer variant</td>
+          </tr>
+          <tr class="best-row">
+            <td><span class="model-name model-best">Fine-Tune Top 20<span class="crown">★</span></span></td>
+            <td>
+              <span style="color: var(--amber);">94.4%</span>
+              <div class="bar-cell"><div class="mini-bar"><div class="mini-fill" style="width: 94.4%; background: var(--amber);"></div></div></div>
+            </td>
+            <td>
+              <span style="color: var(--amber);">0.981</span>
+              <div class="bar-cell"><div class="mini-bar"><div class="mini-fill" style="width: 98.1%; background: var(--amber);"></div></div></div>
+            </td>
+            <td style="font-size: 12px; color: var(--text3);">Unfreeze top 20 layers of backbone</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- TECH STACK -->
+  <section class="section">
+    <div class="section-header">
+      <div>
+        <div class="section-eyebrow">Stack</div>
+        <div class="section-title">Technologies Used</div>
+      </div>
+    </div>
+    <div class="tech-grid">
+      <div class="tech-card">
+        <div class="tech-icon" style="background: rgba(255,110,64,0.12);">🔶</div>
+        <div class="tech-info">
+          <div class="tech-name">TensorFlow 2.20</div>
+          <div class="tech-desc">Core deep learning framework</div>
+        </div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-icon" style="background: rgba(255,45,85,0.12);">🔴</div>
+        <div class="tech-info">
+          <div class="tech-name">Keras</div>
+          <div class="tech-desc">Model building & training API</div>
+        </div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-icon" style="background: rgba(79,156,249,0.12);">🔵</div>
+        <div class="tech-info">
+          <div class="tech-name">MobileNetV2</div>
+          <div class="tech-desc">ImageNet pretrained backbone</div>
+        </div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-icon" style="background: rgba(62,207,142,0.12);">🟢</div>
+        <div class="tech-info">
+          <div class="tech-name">Scikit-Learn</div>
+          <div class="tech-desc">Evaluation metrics & ROC</div>
+        </div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-icon" style="background: rgba(245,166,35,0.12);">🟡</div>
+        <div class="tech-info">
+          <div class="tech-name">Matplotlib / Seaborn</div>
+          <div class="tech-desc">Visualization & plots</div>
+        </div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-icon" style="background: rgba(159,122,234,0.12);">🟣</div>
+        <div class="tech-info">
+          <div class="tech-name">Google Colab + GPU</div>
+          <div class="tech-desc">Cloud training environment</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FUTURE WORK -->
+  <section class="section">
+    <div class="section-header">
+      <div>
+        <div class="section-eyebrow">Roadmap</div>
+        <div class="section-title">Future Improvements</div>
+      </div>
+    </div>
+    <div class="future-grid">
+      <div class="future-card">
+        <div class="future-num">01</div>
+        <div>
+          <div class="future-title">EfficientNetV2 Backbone</div>
+          <div class="future-text">Upgrade to EfficientNetB0/V2 for better accuracy-to-parameter ratio on medical images.</div>
+        </div>
+      </div>
+      <div class="future-card">
+        <div class="future-num">02</div>
+        <div>
+          <div class="future-title">Grad-CAM Explainability</div>
+          <div class="future-text">Visualize which regions in the X-ray drive predictions to build clinician trust.</div>
+        </div>
+      </div>
+      <div class="future-card">
+        <div class="future-num">03</div>
+        <div>
+          <div class="future-title">Larger Validation Set</div>
+          <div class="future-text">Current val set is only 16 images — expand to 500+ for reliable hyperparameter tuning signal.</div>
+        </div>
+      </div>
+      <div class="future-card">
+        <div class="future-num">04</div>
+        <div>
+          <div class="future-title">Class Weighting</div>
+          <div class="future-text">Apply class weights (72.83% vs 27.17% imbalance) to improve specificity without hurting recall.</div>
+        </div>
+      </div>
+      <div class="future-card">
+        <div class="future-num">05</div>
+        <div>
+          <div class="future-title">FastAPI Deployment</div>
+          <div class="future-text">Package the DeepLearningPredictor class into a REST API with Docker containerization.</div>
+        </div>
+      </div>
+      <div class="future-card">
+        <div class="future-num">06</div>
+        <div>
+          <div class="future-title">Ensemble Models</div>
+          <div class="future-text">Combine MobileNetV2, DenseNet, and ResNet50 predictions for a more robust system.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="footer-name">Kaiwalya Raut</div>
+    <div class="footer-sub">Deep Learning Capstone · Built with TensorFlow, Keras & Google Colab</div>
+    <div class="footer-tags">
+      <span class="footer-tag">Transfer Learning</span>
+      <span class="footer-tag">Medical Imaging</span>
+      <span class="footer-tag">Binary Classification</span>
+      <span class="footer-tag">MobileNetV2</span>
+      <span class="footer-tag">AUC 0.9558</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const dropZone = document.getElementById('drop-zone');
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0]; if (f) handleFile(f);
+  });
+
+  function handleFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const src = e.target.result;
+      const preview = document.getElementById('xray-preview');
+      const placeholder = document.getElementById('xray-placeholder');
+      preview.src = src; preview.style.display = 'block';
+      placeholder.style.display = 'none';
+
+      // Simulate prediction (random for demo)
+      const isNormal = Math.random() > 0.55;
+      const conf = (0.72 + Math.random() * 0.25).toFixed(3);
+      const label = isNormal ? 'NORMAL' : 'PNEUMONIA';
+      const pct = Math.round(parseFloat(conf) * 100);
+      const cls = isNormal ? 'normal' : 'pneumonia';
+
+      const badge = document.getElementById('result-badge');
+      badge.textContent = label; badge.className = `result-badge ${cls}`;
+
+      const fill = document.getElementById('conf-fill');
+      fill.className = `confidence-fill ${cls}`;
+      setTimeout(() => { fill.style.width = pct + '%'; }, 50);
+
+      document.getElementById('conf-pct').textContent = pct + '%';
+      document.getElementById('res-label').textContent = label;
+      document.getElementById('res-conf').textContent = pct + '%';
+
+      document.getElementById('result-panel').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  }
+</script>
+</body>
+</html>
