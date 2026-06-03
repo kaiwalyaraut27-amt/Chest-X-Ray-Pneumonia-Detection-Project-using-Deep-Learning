@@ -1,0 +1,29 @@
+{
+  "project": "DL Day 6 Capstone",
+  "dataset": "Chest X-ray Pneumonia Detection",
+  "model_type": "MobileNetV2 Fine-Tuned",
+  "architecture": "Transfer Learning + GAP + Dense",
+  "input_shape": [
+    150,
+    150,
+    3
+  ],
+  "classes": {
+    "0": "NORMAL",
+    "1": "PNEUMONIA"
+  },
+  "preprocessing": {
+    "resize": "150x150",
+    "normalize": "divide by 255"
+  },
+  "trained_on": "2026-06-03T07:53:25.527371",
+  "metrics": {
+    "test_accuracy": 0.8606,
+    "test_auc": 0.9558,
+    "test_f1": 0.8975
+  },
+  "training": {
+    "epochs_run": 19,
+    "best_val_loss": 0.4829
+  }
+}
