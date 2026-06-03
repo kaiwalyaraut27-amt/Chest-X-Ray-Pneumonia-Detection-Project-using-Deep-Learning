@@ -386,6 +386,6 @@ Through this project I learned:
 
 **Kaiwalya Raut**
 
-Deep Learning Bootcamp — Day 6 Capstone Project
+Deep Learning - Capstone Project
 
 Built using TensorFlow, Keras, and Google Colab.
