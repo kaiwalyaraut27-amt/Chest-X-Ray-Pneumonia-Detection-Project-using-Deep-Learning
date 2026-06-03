@@ -313,13 +313,13 @@ Replace with your final results:
 
 | Metric      | Score   |
 | ----------- | ------- |
-| Accuracy    | XX.XX%  |
-| Precision   | XX.XX%  |
-| Recall      | XX.XX%  |
-| F1 Score    | XX.XX%  |
-| AUC         | XX.XXXX |
-| Sensitivity | XX.XX%  |
-| Specificity | XX.XX%  |
+| Accuracy    | 86.06X%  |
+| Precision   | 83.01%  |
+| Recall      | 97.69%  |
+| F1 Score    | 89.75%  |
+| AUC         | 0.9558 |
+| Sensitivity | 97.69%  |
+| Specificity | 66.67%  |
 
 ---
 
